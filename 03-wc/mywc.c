@@ -1,10 +1,15 @@
 #include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #define BUFFER_SIZE 4096
+#define SPACE_MAX 7
 
 struct fileData {
     size_t lines;
@@ -13,7 +18,7 @@ struct fileData {
 };
 
 int read_file(struct fileData *const data, int fd) {
-    char filestr[BUFFER_SIZE];
+    unsigned char filestr[BUFFER_SIZE];
     int status = 0;
 
     bool last_space = true;
@@ -63,38 +68,119 @@ int wc_path(struct fileData *const data, const char *path) {
     return status;
 }
 
-int main(int argc, char *argv[]) {
+int get_space(char *argv[], int argc, int start) {
+    struct stat buffer;
+    int status;
+    int fd;
 
-    int status = 0;
+    int space = 1;
+    off_t total = 0;
 
-    if (argc == 1) {
-        return status;
-    } else if (argc == 2) {
-        struct fileData counts = {0, 0, 0};
-        int res = wc_path(&counts, argv[1]);
-        if (res < 0)
-            status = 1;
-        else
-            printf("%ld %ld %ld %s\n", counts.lines, counts.words, counts.bytes,
-                   argv[1]);
-        return status;
+    for (int i = start; i < argc; i++) {
+        fd = open(argv[i], O_RDONLY);
+        if (fd < 0) {
+            continue;
+        }
+        status = fstat(fd, &buffer);
+        close(fd);
+        if (status < 0) {
+            continue;
+        }
+        total += buffer.st_size;
     }
 
+    while (total) {
+        total /= 10;
+        space += 1;
+    }
+
+    if (space > SPACE_MAX)
+        return SPACE_MAX;
+    return space;
+}
+
+void display_count(struct fileData const data, const char *file_name, int space,
+                   bool words, bool lines, bool characters) {
+    if (lines) {
+        printf("%*zu", space, data.lines);
+    }
+    if (words) {
+        printf("%*zu", space, data.words);
+    }
+    if (characters) {
+        printf("%*zu", space, data.bytes);
+    }
+    printf(" %s\n", file_name);
+}
+
+int main(int argc, char *argv[]) {
+
+    bool words = false;
+    bool lines = false;
+    bool characters = false;
+    while (1) {
+        int option = getopt(argc, argv, ":lwc");
+        if (option == -1) {
+            if (words == false && lines == false && characters == false) {
+                words = true;
+                lines = true;
+                characters = true;
+            }
+            break;
+        }
+
+        char option_char = option;
+        switch (option_char) {
+        case '?':
+            fprintf(stderr, "%s: error: unexpected argument found\n", argv[0]);
+            return 1;
+            break;
+
+        case 'w':
+            words = true;
+            break;
+
+        case 'l':
+            lines = true;
+            break;
+
+        case 'c':
+            characters = true;
+            break;
+        }
+    }
+
+    if (argc == optind) {
+        struct fileData counts = {0, 0, 0};
+        int res = read_file(&counts, STDIN_FILENO);
+        if (res < 0) {
+            fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
+            return 1;
+        }
+        display_count(counts, "", SPACE_MAX, words, lines, characters);
+        return 0;
+    }
+
+    int status = 0;
+    int space = get_space(argv, argc, optind);
+
     struct fileData total = {0, 0, 0};
-    for (int i = 1; i < argc; i++) {
+    for (int i = optind; i < argc; i++) {
         struct fileData counts = {0, 0, 0};
         int res = wc_path(&counts, argv[i]);
-        if (res < 0)
+        if (res < 0) {
+            fprintf(stderr, "%s: %s: %s\n", argv[0], argv[i], strerror(errno));
             status = 1;
-        else {
-            printf("%ld %ld %ld %s\n", counts.lines, counts.words, counts.bytes,
-                   argv[i]);
+        } else {
+            display_count(counts, argv[i], space, words, lines, characters);
             total.bytes += counts.bytes;
             total.lines += counts.lines;
             total.words += counts.words;
         }
     }
 
-    printf("%ld %ld %ld total\n", total.lines, total.words, total.bytes);
+    if (argc - optind > 1) {
+        display_count(total, "total", space, words, lines, characters);
+    }
     return status;
 }
