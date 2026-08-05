@@ -73,7 +73,7 @@ int get_space(char *argv[], int argc, int start) {
     int status;
     int fd;
 
-    int space = 1;
+    int space = 0;
     off_t total = 0;
 
     for (int i = start; i < argc; i++) {
@@ -101,14 +101,24 @@ int get_space(char *argv[], int argc, int start) {
 
 void display_count(struct fileData const data, const char *file_name, int space,
                    bool words, bool lines, bool characters) {
+    bool printed = false;
     if (lines) {
         printf("%*zu", space, data.lines);
+        printed = true;
     }
     if (words) {
-        printf("%*zu", space, data.words);
+        if (!printed)
+            printf("%*zu", space, data.words);
+        else
+            printf(" %*zu", space, data.words);
+        printed = true;
     }
     if (characters) {
-        printf("%*zu", space, data.bytes);
+        if (!printed)
+            printf("%*zu", space, data.bytes);
+        else
+            printf(" %*zu", space, data.bytes);
+        printed = true;
     }
     printf(" %s\n", file_name);
 }
