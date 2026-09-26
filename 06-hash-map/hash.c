@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CAPACITY 4096
+#define CAPACITY 1
 
 struct entry {
     char *key;
@@ -65,8 +65,81 @@ int map_init(struct map *m) {
     return 0;
 }
 
+int map_move(struct map *m, uint32_t a, uint32_t b, const char *key) {
+    if (!m)
+        return -1;
+
+    struct entry *e = m->entries[a];
+    // if on top
+    if (e && strcmp(e->key, key) == 0) {
+        struct entry *end = e->next;
+        m->entries[a] = end;
+
+        e->next = m->entries[b];
+        m->entries[b] = e;
+        return 0;
+    } else {
+        if (e) {
+            while (e->next) {
+                if (strcmp(e->next->key, key) == 0) {
+                    struct entry *end = e->next->next;
+                    struct entry *move = e->next;
+                    e->next = end;
+                    move->next = m->entries[b];
+                    m->entries[b] = move;
+                    return 0;
+                } else {
+                    e = e->next;
+                }
+            }
+        }
+    }
+    return -1;
+}
+
+int map_grow(struct map *m) {
+    if (!m)
+        return -1;
+    if (m->capacity == 0)
+        return -1;
+    void *ptr = reallocarray(m->entries, m->capacity * 2, sizeof(*m->entries));
+    if (!ptr)
+        return -1;
+    m->capacity *= 2;
+    m->entries = ptr;
+
+    // Zero new entries
+    for (size_t i = m->capacity / 2; i < m->capacity; i++)
+        m->entries[i] = NULL;
+
+    for (uint32_t i = 0; i < m->capacity / 2; i++) {
+        struct entry *e = m->entries[i];
+        while (e) {
+
+            uint32_t hash = fnv1a(e->key);
+            uint32_t index = hash % m->capacity;
+            if (index != i) {
+                map_move(m, i, index, e->key);
+                e = m->entries[i];
+                continue;
+            } else {
+                e = e->next;
+            }
+        }
+    }
+    return 0;
+}
+
 // insert or update
 int map_set(struct map *m, const char *key, int value) {
+
+    if (!m)
+        return -1;
+    if (m->len >= (m->capacity / 4) * 3) {
+        // if above 75%
+        map_grow(m);
+    }
+
     // Hash key and find calc index
     uint32_t hash = fnv1a(key);
     uint32_t index = hash % m->capacity;
@@ -80,12 +153,15 @@ int map_set(struct map *m, const char *key, int value) {
         }
         e = e->next;
     }
-    struct entry *ptr = malloc(sizeof(struct entry));
-    if (!ptr)
-        return -1;
+
     char *k = strdup(key);
     if (!k)
         return -1;
+    struct entry *ptr = malloc(sizeof(struct entry));
+    if (!ptr) {
+        free(k);
+        return -1;
+    }
     *ptr = (struct entry){
         .key = k,
         .value = value,
@@ -143,46 +219,55 @@ int map_del(struct map *m, const char *key) {
     return -1;
 };
 
-size_t map_len(const struct map *m);
+size_t map_len(const struct map *m) { return m->len; }
 
 int main() {
     struct map m;
     map_init(&m);
+
+    // Setting up values
     if (map_set(&m, "feli", 21) != 0)
         return 1;
-
-    //
     if (map_set(&m, "test", 123) != 0)
         return 1;
     if (map_set(&m, "test1", 1234) != 0)
         return 1;
     if (map_set(&m, "test2", 12345) != 0)
         return 1;
-    //
 
-    int age = -1;
-    if (map_get(&m, "feli", &age) != 0)
-        return 1;
-    printf("feli: %d\n", age);
+    int status = map_grow(&m);
+    status = map_grow(&m);
+    status = map_grow(&m);
+    status = map_grow(&m);
+    status = map_grow(&m);
+    status = map_grow(&m);
+    status = map_grow(&m);
+    status = map_grow(&m);
+    status = map_grow(&m);
+    status = map_grow(&m);
+    printf("grow status: %d\n", status);
 
-    age = -1;
-    if (map_get(&m, "test", &age) != 0)
-        return 1;
-    printf("test: %d\n", age);
-
-    int status = map_del(&m, "test");
-    printf("test deleted with status: %d\n", status);
-    age = -1;
-    if (map_get(&m, "feli", &age) != 0)
-        printf("failed to get feli\n");
+    int value;
+    value = 0;
+    if (map_get(&m, "feli", &value) != 0)
+        printf("Failed to fetch feli\n");
     else
-        printf("feli: %d\n", age);
-
-    age = -1;
-    if (map_get(&m, "test", &age) != 0)
-        printf("failed to get test\n");
+        printf("feli: %d\n", value);
+    value = 0;
+    if (map_get(&m, "test", &value) != 0)
+        printf("Failed to fetch test\n");
     else
-        printf("test: %d\n", age);
+        printf("test: %d\n", value);
+    value = 0;
+    if (map_get(&m, "test1", &value) != 0)
+        printf("Failed to fetch test1\n");
+    else
+        printf("test1: %d\n", value);
+    value = 0;
+    if (map_get(&m, "test2", &value) != 0)
+        printf("Failed to fetch test2\n");
+    else
+        printf("test2: %d\n", value);
 
     map_free(&m);
 }
