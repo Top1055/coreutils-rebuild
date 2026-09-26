@@ -225,49 +225,49 @@ int main() {
     struct map m;
     map_init(&m);
 
-    // Setting up values
-    if (map_set(&m, "feli", 21) != 0)
-        return 1;
-    if (map_set(&m, "test", 123) != 0)
-        return 1;
-    if (map_set(&m, "test1", 1234) != 0)
-        return 1;
-    if (map_set(&m, "test2", 12345) != 0)
-        return 1;
+    char key[32];
 
-    int status = map_grow(&m);
-    status = map_grow(&m);
-    status = map_grow(&m);
-    status = map_grow(&m);
-    status = map_grow(&m);
-    status = map_grow(&m);
-    status = map_grow(&m);
-    status = map_grow(&m);
-    status = map_grow(&m);
-    status = map_grow(&m);
-    printf("grow status: %d\n", status);
+    size_t failures = 0;
 
-    int value;
-    value = 0;
-    if (map_get(&m, "feli", &value) != 0)
-        printf("Failed to fetch feli\n");
-    else
-        printf("feli: %d\n", value);
-    value = 0;
-    if (map_get(&m, "test", &value) != 0)
-        printf("Failed to fetch test\n");
-    else
-        printf("test: %d\n", value);
-    value = 0;
-    if (map_get(&m, "test1", &value) != 0)
-        printf("Failed to fetch test1\n");
-    else
-        printf("test1: %d\n", value);
-    value = 0;
-    if (map_get(&m, "test2", &value) != 0)
-        printf("Failed to fetch test2\n");
-    else
-        printf("test2: %d\n", value);
+    // Set 10k values
+    for (int i = 0; i < 10000; i++) {
+        snprintf(key, sizeof(key), "test%d", i);
+
+        if (map_set(&m, key, i) != 0)
+            failures++;
+    }
+
+    printf("10k entries created\n");
+
+    // Access them all
+    for (int i = 0; i < 10000; i++) {
+        snprintf(key, sizeof(key), "test%d", i);
+
+        int out;
+        if (map_get(&m, key, &out))
+            failures++;
+    }
+
+    // update half
+    for (int i = 0; i < 10000 / 2; i++) {
+        snprintf(key, sizeof(key), "test%d", i);
+
+        if (map_set(&m, key, i * 10))
+            failures++;
+    }
+    printf("updated 5k\n");
+
+    // delete a third
+    for (int i = 0; i < 10000 / 3; i++) {
+        snprintf(key, sizeof(key), "test%d", i);
+
+        if (map_del(&m, key))
+            failures++;
+    }
+    printf("deleted a third, %zu remain\n", map_len(&m));
 
     map_free(&m);
+
+    printf("failure count: %zu\n", failures);
+    return 0;
 }
