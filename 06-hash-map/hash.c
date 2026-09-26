@@ -42,6 +42,7 @@ void map_free(struct map *m) {
                 free(m->entries[i]->key);
                 free(m->entries[i]);
                 m->entries[i] = ptr;
+                e = m->entries[i];
             } else {
                 free(m->entries[i]->key);
                 free(m->entries[i]);
@@ -111,7 +112,36 @@ int map_get(const struct map *m, const char *key, int *out) {
     return -1;
 }
 
-int map_del(struct map *m, const char *key);
+int map_del(struct map *m, const char *key) {
+    uint32_t hash = fnv1a(key);
+    uint32_t index = hash % m->capacity;
+
+    struct entry *e = m->entries[index];
+
+    if (e) {
+        if (strcmp(e->key, key) == 0) {
+            m->entries[index] = e->next;
+            free(e->key);
+            free(e);
+            m->len--;
+            return 0;
+        } else {
+            while (e->next) {
+                if (strcmp(e->next->key, key) == 0) {
+                    struct entry *ptr = e->next->next;
+                    free(e->next->key);
+                    free(e->next);
+                    e->next = ptr;
+                    m->len--;
+                    return 0;
+                } else {
+                    e = e->next;
+                }
+            }
+        }
+    }
+    return -1;
+};
 
 size_t map_len(const struct map *m);
 
@@ -120,10 +150,39 @@ int main() {
     map_init(&m);
     if (map_set(&m, "feli", 21) != 0)
         return 1;
+
+    //
+    if (map_set(&m, "test", 123) != 0)
+        return 1;
+    if (map_set(&m, "test1", 1234) != 0)
+        return 1;
+    if (map_set(&m, "test2", 12345) != 0)
+        return 1;
+    //
+
     int age = -1;
     if (map_get(&m, "feli", &age) != 0)
         return 1;
-    map_free(&m);
-
     printf("feli: %d\n", age);
+
+    age = -1;
+    if (map_get(&m, "test", &age) != 0)
+        return 1;
+    printf("test: %d\n", age);
+
+    int status = map_del(&m, "test");
+    printf("test deleted with status: %d\n", status);
+    age = -1;
+    if (map_get(&m, "feli", &age) != 0)
+        printf("failed to get feli\n");
+    else
+        printf("feli: %d\n", age);
+
+    age = -1;
+    if (map_get(&m, "test", &age) != 0)
+        printf("failed to get test\n");
+    else
+        printf("test: %d\n", age);
+
+    map_free(&m);
 }
