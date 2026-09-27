@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CAPACITY 1
+#define CAPACITY 256
 
 struct entry {
     char *key;
@@ -33,7 +33,7 @@ void map_free(struct map *m) {
         return;
     if (m->capacity == 0)
         return;
-    for (uint32_t i = 0; i < m->capacity; i++) {
+    for (size_t i = 0; i < m->capacity; i++) {
         struct entry *e = m->entries[i];
 
         while (e) {
@@ -112,7 +112,7 @@ int map_grow(struct map *m) {
     for (size_t i = m->capacity / 2; i < m->capacity; i++)
         m->entries[i] = NULL;
 
-    for (uint32_t i = 0; i < m->capacity / 2; i++) {
+    for (size_t i = 0; i < m->capacity / 2; i++) {
         struct entry *e = m->entries[i];
         while (e) {
 
@@ -135,9 +135,19 @@ int map_set(struct map *m, const char *key, int value) {
 
     if (!m)
         return -1;
-    if (m->len >= (m->capacity / 4) * 3) {
+    if (m->len * 4 >= m->capacity * 3) {
         // if above 75%
-        map_grow(m);
+        int status = map_grow(m);
+        if (status != 0) {
+            if (m->len == m->capacity)
+                fprintf(stderr,
+                        "WARN: hash map length exceeding capacity and cannot "
+                        "grow %zu/%zu\n",
+                        m->len, m->capacity);
+            else
+                fprintf(stderr, "WARN: hash map cannot grow %zu/%zu\n", m->len,
+                        m->capacity);
+        }
     }
 
     // Hash key and find calc index
@@ -217,7 +227,7 @@ int map_del(struct map *m, const char *key) {
         }
     }
     return -1;
-};
+}
 
 size_t map_len(const struct map *m) { return m->len; }
 
@@ -243,8 +253,9 @@ int main() {
     for (int i = 0; i < 10000; i++) {
         snprintf(key, sizeof(key), "test%d", i);
 
-        int out;
-        if (map_get(&m, key, &out))
+        int out = -1;
+        map_get(&m, key, &out);
+        if (out != i)
             failures++;
     }
 
@@ -252,7 +263,13 @@ int main() {
     for (int i = 0; i < 10000 / 2; i++) {
         snprintf(key, sizeof(key), "test%d", i);
 
-        if (map_set(&m, key, i * 10))
+        if (map_set(&m, key, i * 10) != 0)
+            failures++;
+
+        // check they're updated
+        int out = -1;
+        map_get(&m, key, &out);
+        if (out != i * 10)
             failures++;
     }
     printf("updated 5k\n");
@@ -261,7 +278,13 @@ int main() {
     for (int i = 0; i < 10000 / 3; i++) {
         snprintf(key, sizeof(key), "test%d", i);
 
-        if (map_del(&m, key))
+        if (map_del(&m, key) != 0)
+            failures++;
+
+        // check they're deleted
+        int out = -1;
+        map_get(&m, key, &out);
+        if (out == i * 10)
             failures++;
     }
     printf("deleted a third, %zu remain\n", map_len(&m));
